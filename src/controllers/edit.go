@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -50,6 +53,7 @@ func EditBlobController(w http.ResponseWriter, r *http.Request) {
 		Metadata  map[string]interface{} `json:"metadata"`
 		Public    *bool                  `json:"public"`
 		ExpiresAt *string                `json:"expires_at"`
+		Bucket    *string                `json:"bucket"`
 		Filename  *string                `json:"filename"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,6 +98,40 @@ func EditBlobController(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Filename != nil && *req.Filename != "" {
 		blob.Filename = *req.Filename
+	}
+	if req.Bucket != nil && *req.Bucket != "" {
+		if strings.Contains(*req.Bucket, "..") {
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(map[string]string{"error": "Invalid bucket name"}); err != nil {
+				functions.Error("failed to encode edit error json: %v", err)
+			}
+			return
+		}
+		if !regexp.MustCompile(`^[a-zA-Z0-9/_-]+$`).MatchString(*req.Bucket) {
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(map[string]string{"error": "Bucket can only contain letters, numbers, '/', '-', and '_'"}); err != nil {
+				functions.Error("failed to encode edit error json: %v", err)
+			}
+			return
+		}
+		oldBucket := blob.Bucket
+		blob.Bucket = *req.Bucket
+		blob.Path = filepath.ToSlash(filepath.Join(blob.Bucket, blob.ID.String()))
+		// Move file
+		storagePath := os.Getenv("BLOB_STORAGE_PATH")
+		if storagePath == "" {
+			storagePath = "storage/uploads"
+		}
+		oldPath := filepath.Join(storagePath, oldBucket, blob.ID.String())
+		newPath := filepath.Join(storagePath, blob.Bucket, blob.ID.String())
+		if err := os.MkdirAll(filepath.Dir(newPath), 0750); err != nil {
+			functions.WriteJSONError(w, "Failed to create new bucket directory", http.StatusInternalServerError)
+			return
+		}
+		if err := os.Rename(oldPath, newPath); err != nil {
+			functions.WriteJSONError(w, "Failed to move file", http.StatusInternalServerError)
+			return
+		}
 	}
 	blob.UpdatedAt = time.Now().UTC()
 

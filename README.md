@@ -169,7 +169,7 @@ Uploads a new blob.
 | Field      | Required | Type    | Description                                                        |
 | ---------- | -------- | ------- | ------------------------------------------------------------------ |
 | file       | Yes      | file    | File to upload                                                     |
-| bucket     | Yes      | string  | Logical group                                                      |
+| bucket     | Yes      | string  | Logical group/path (supports subfolders, e.g., "folder/subfolder") |
 | filename   | No       | string  | Custom filename                                                    |
 | public     | No       | boolean | Accepts true, false, 0, 1 (default: true)                          |
 | expires_at | No       | string  | RFC3339 date                                                       |
@@ -181,7 +181,7 @@ Uploads a new blob.
 curl -X PUT http://localhost:3000/blob \
   -H "Authorization: Bearer change-me-with-32-characters-or-more" \
   -F "file=@README.md" \
-  -F "bucket=test" \
+  -F "bucket=folder/subfolder" \
   -F "filename=custom_name.txt" \
   -F "public=false" \
   -F "expires_at=2026-03-02T12:00:00Z" \
@@ -378,6 +378,7 @@ curl -X POST http://localhost:3000/blob/1ddff9d2-3aa1-485d-8082-e484c62ff630 \
     "metadata": {"author": "newuser", "desc": "updated file"},
     "public": true,
     "expires_at": "2026-04-01T12:00:00Z",
+    "bucket": "newbucket",
     "filename": "new_name.txt"
   }'
 ```
@@ -387,7 +388,7 @@ Response:
 ```json
 {
   "id": "1ddff9d2-3aa1-485d-8082-e484c62ff630",
-  "bucket": "bucket",
+  "bucket": "newbucket",
   "filename": "new_name.txt",
   "mime": "application/octet-stream",
   "size": 3625,

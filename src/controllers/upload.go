@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -39,6 +40,10 @@ func UploadBlobController(w http.ResponseWriter, r *http.Request) {
 		validationErrors["bucket"] = "bucket is required"
 	} else if !govalidator.StringLength(bucket, "1", "64") {
 		validationErrors["bucket"] = "bucket must be 1-64 chars"
+	} else if strings.Contains(bucket, "..") {
+		validationErrors["bucket"] = "bucket cannot contain '..'"
+	} else if !regexp.MustCompile(`^[a-zA-Z0-9/_-]+$`).MatchString(bucket) {
+		validationErrors["bucket"] = "bucket can only contain letters, numbers, '/', '-', and '_'"
 	}
 
 	if filename != "" && !govalidator.StringLength(filename, "1", "255") {
@@ -123,21 +128,17 @@ func UploadBlobController(w http.ResponseWriter, r *http.Request) {
 		filename = header.Filename
 	}
 
-	if strings.Contains(bucket, "..") || strings.ContainsAny(bucket, "/\\") {
-		functions.WriteJSONError(w, "Invalid bucket name", http.StatusBadRequest)
-		return
-	}
 	if filename != "" && (strings.Contains(filename, "..") || strings.ContainsAny(filename, "/\\")) {
 		functions.WriteJSONError(w, "Invalid filename", http.StatusBadRequest)
 		return
 	}
-	bucketPath := storagePath + string(os.PathSeparator) + bucket
+	bucketPath := filepath.Join(storagePath, bucket)
 	if err := os.MkdirAll(bucketPath, 0750); err != nil {
 		functions.WriteJSONError(w, "Failed to create bucket directory", http.StatusInternalServerError)
 		return
 	}
 
-	blobPath := bucketPath + string(os.PathSeparator) + id.String()
+	blobPath := filepath.Join(bucketPath, id.String())
 	realBlobPath, err := filepath.Abs(blobPath)
 	realBucketPath, err2 := filepath.Abs(bucketPath)
 	if err != nil || err2 != nil || !strings.HasPrefix(realBlobPath, realBucketPath) {
@@ -192,7 +193,7 @@ func UploadBlobController(w http.ResponseWriter, r *http.Request) {
 		Mime:      mime,
 		Size:      size,
 		Hash:      id.String(),
-		Path:      bucket + "/" + id.String(),
+		Path:      filepath.ToSlash(filepath.Join(bucket, id.String())),
 		Public:    &public,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
